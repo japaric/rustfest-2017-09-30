@@ -1,49 +1,811 @@
 <!doctype html>
 <html>
-	<head>
-		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-		<title>reveal.js</title>
+    <title>reveal.js</title>
 
-		<link rel="stylesheet" href="css/reveal.css">
-		<link rel="stylesheet" href="css/theme/black.css">
+    <link rel="stylesheet" href="css/reveal.css">
+    <link rel="stylesheet" href="css/theme/black.css">
 
-		<!-- Theme used for syntax highlighting of code -->
-		<link rel="stylesheet" href="lib/css/zenburn.css">
+    <!-- Theme used for syntax highlighting of code -->
+    <link rel="stylesheet" href="lib/css/zenburn.css">
 
-		<!-- Printing and PDF exports -->
-		<script>
-			var link = document.createElement( 'link' );
-			link.rel = 'stylesheet';
-			link.type = 'text/css';
-			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
-			document.getElementsByTagName( 'head' )[0].appendChild( link );
-		</script>
-	</head>
-	<body>
-		<div class="reveal">
-			<div class="slides">
-				<section>Slide 1</section>
-				<section>Slide 2</section>
-			</div>
-		</div>
+    <!-- Printing and PDF exports -->
+    <script>
+      var link = document.createElement( 'link' );
+      link.rel = 'stylesheet';
+      link.type = 'text/css';
+      link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+      document.getElementsByTagName( 'head' )[0].appendChild( link );
+    </script>
+  </head>
+  <body>
+    <div class="reveal">
+      <div class="slides">
+        <section>
+          <h2>Fearless concurrency in your microcontroller</h2>
 
-		<script src="lib/js/head.min.js"></script>
-		<script src="js/reveal.js"></script>
+          <p>
+            <a href="https://japaric.github.io/rustfest-2017-09-30">
+              https://japaric.github.io/rustfest-2017-09-30
+            </a>
+          </p>
 
-		<script>
-			// More info about config & dependencies:
-			// - https://github.com/hakimel/reveal.js#configuration
-			// - https://github.com/hakimel/reveal.js#dependencies
-			Reveal.initialize({
-				dependencies: [
-					{ src: 'plugin/markdown/marked.js' },
-					{ src: 'plugin/markdown/markdown.js' },
-					{ src: 'plugin/notes/notes.js', async: true },
-					{ src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } }
-				]
-			});
-		</script>
-	</body>
+          <p>Jorge Aparicio - <a href="https://github.com/japaric">@japaric</a> - jorapa-7@student.ltu.se</p>
+
+          <p>
+            <a href="https://www.ltu.se/staff/p/pln-1.11258?l=en">Per Lindgren</a> -
+            Per.Lindgren@ltu.se
+          </p>
+
+          <p>Lulea University of Technology</p>
+
+        </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Agenda
+
+- Microcontroller basics
+- Cooperative multitasking
+- Preemption
+- Locks, locks, locks
+- Fearless concurrency
+- What's next?
+            </textarea>
+          </section>
+
+        <section>
+          <section>
+            <h3>Microcontrollers</h3>
+
+            <p class="fragment">
+              I/O with the world
+            </p>
+
+            <a href="https://en.wikipedia.org/wiki/Microcontroller#/media/File:PIC18F8720.jpg">
+              <img alt="A microcontroller soldered to a PCB" width="300" src="https://upload.wikimedia.org/wikipedia/commons/1/18/PIC18F8720.jpg"/>
+            </a>
+
+            <p>
+              <span class="fragment">Cheap.</span>
+              <span class="fragment">Simple.</span>
+              <span class="fragment">Low power.</span>
+              <span class="fragment">Full control.</span>
+            </p>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### A minimal program
+
+[Quickstart] framework.
+
+[Quickstart]: https://github.com/japaric/cortex-m-quickstart
+
+``` rust
+#![no_std]
+
+extern crate cortex_m_rt;
+extern crate stm32f103xx;
+
+// before: device boots and RAM is initialized
+
+fn main() {
+    // do stuff here
+}
+
+// after: CPU goes to sleep
+```
+
+[Cortex-M] and [MSP430] support. [RISC-V] is WIP.
+
+[Cortex-M]: https://github.com/japaric/cortex-m-quickstart
+[MSP430]: https://github.com/japaric/msp430-quickstart
+[RISC-V]: https://github.com/rust-embedded/issues/TODO
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Doing I/O
+
+<p class="fragment">
+  Memory mapped I/O.
+</p>
+
+``` rust
+fn main() {
+    // omitted: initialization code
+
+    let register = 0x4001_1010 as *mut u32;
+
+    unsafe {
+        // turns an LED on
+        ptr::write_volatile(register, 1 << 29);
+
+        // turns the LED off
+        ptr::write_volatile(register, 1 << 13);
+    }
+}
+```
+            </textarea>
+          </section>
+        </section>
+
+        <section>
+          <section data-markdown>
+            <textarea data-template>
+### 3 common peripherals
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### GPIO
+
+General Purpose Input / Output.
+
+``` rust
+fn main() {
+    // omitted: initialization
+
+    LED.on();
+    LED.off();
+}
+```
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Timers
+
+``` rust
+fn main() {
+    // omitted: more initialization
+
+    timer.init(500.ms(), rcc); // periodic
+    timer.resume(); // start alarm
+
+    loop {
+        timer.bwait();
+        LED.on();
+        timer.bwait();
+        LED.off();
+    }
+}
+```
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+## Timers
+
+How does it work?
+
+``` rust
+// simplified
+fn bwait() {
+    loop {
+        // did the alarm go off?
+        if tim3.sr.read().uif().bit_is_clear() {
+            // no, ask again
+        } else {
+            // yes, clear the bit
+            tim3.sr.modify(|_, w| w.uif().clear_bit())
+            return;
+        }
+    }
+}
+```
+
+<p class="fragment">
+  <em>Busy waiting.</em>
+</p>
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+## Serial
+
+"Serial port" communication.
+
+``` rust
+fn main() {
+    // omitted: more initialization
+
+    serial.bwrite_all(b"Hello!\n").unwrap();
+
+    loop {
+        let byte = serial.bread().unwrap();
+        serial.bwrite(byte).unwrap();
+    }
+}
+```
+
+            </textarea>
+          </section>
+        </section>
+
+        <section>
+          <section data-markdown>
+            <textarea data-template>
+### Cooperative multitasking
+
+<p class="fragment"><em>Generators</em></p>
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Generators
+
+``` rust
+// simplified
+fn gread() -> impl Generator<Return=u8, Yield=()> {
+    || {
+        // while no new data available
+        while usart1.sr.read().rxne().bit_is_clear() {
+            yield;
+        }
+
+        // read byte
+        usart1.dr.read().bits()
+    }
+}
+```
+            </textarea>
+          </section>
+
+          <section>
+            <h3>Tasks</h3>
+              <pre><code class="rust fragment fade-out" data-trim>
+let mut task1 = || {
+    loop {
+        let byte = await!(serial.gread()).unwrap();
+        await!(serial.gwrite(byte)).unwrap();
+    }
+};
+              </code></pre>
+
+              <pre><code class="rust fragment" data-trim>
+let mut on = false;
+let mut task2 = || {
+    loop {
+        on = !on;
+
+        if on {
+            LED.on();
+        } else {
+            LED.off();
+        }
+
+        await!(timer.gwait());
+    }
+};
+              </code></pre>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Concurrent execution
+
+``` rust
+fn main() {
+    // omitted: initialization code
+
+    let mut task1 = || { /* .. */ };
+
+    let mut on = false;
+    let mut task2 = || { /* .. */};
+
+    // run both tasks concurrently
+    loop {
+        task1.resume();
+        task2.resume();
+    }
+}
+```
+
+<p class="fragment">
+  Note that this program <em>still</em> has busy waiting.
+</p>
+            </textarea>
+          </section>
+        </section>
+
+
+        <section>
+          <section>
+            <h3>The need for preemption</h3>
+
+            <p>
+              Scenario: You need to execute two periodic tasks concurrently.
+            </p>
+
+            <ul>
+              <li class="fragment">Task 1 needs to be run every 10 ms and takes 2 ms to complete.</li>
+              <li class="fragment">Task 2 needs to be run every 1 ms and takes 100 us to complete.</li>
+            </ul>
+
+            <p class="fragment">
+              Can these timing constrains be satisfied using cooperative multitasking?
+            </p>
+
+            <p class="fragment">
+              In general, <em>no</em>. We need task prioritization, which requires preemption.
+            </p>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Interrupts
+
+A callback mechanism provided by the hardware.
+
+``` rust
+#[macro_use(interrupt)]
+extern crate stm32f103xx;
+
+fn main() {
+    // ..
+}
+
+// event: user pressed a button
+interrupt!(EXTI0, handler);
+
+// callback
+fn handler() {
+    // ..
+}
+```
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Interrupts: echo
+
+Event driven version.
+
+``` rust
+fn main() {
+    // omitted: initialization
+    serial.listen(Event::Rxne); // new data available
+
+    loop { asm::wfi(); } // sleep
+}
+
+interrupt!(USART1, handler);
+
+fn handler() {
+    // omitted: constructing `serial`
+    let byte = serial.read().unwrap();
+    serial.write(byte).unwrap();
+}
+```
+
+<p class="fragment">
+  <em>No busy waiting</em>
+</p>
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Interrupts: Shared memory
+
+Do *NOT* do this.
+
+``` rust
+static mut DATA: Data = /* .. */;
+
+fn main() {
+    unsafe { /* do something with DATA */ }
+}
+
+interrupt!(EXTI0, handler);
+
+fn handler() {
+    unsafe { /* do something with DATA */ }
+}
+```
+
+<p class="fragment">
+  <em>Data races and race conditions.</em>
+</p>
+            </textarea>
+          </section>
+        </section>
+
+        <section>
+          <section data-markdown>
+            <textarea data-template>
+### Locks, locks, locks
+            </textarea>
+          </section>
+
+          <section>
+            <h3>Disabling interrupts</h3>
+
+            <pre><code data-trim data-noescape>
+<span class="fragment">use cortex_m::interrupt;</span>
+
+fn main() {
+    loop {
+        <span class="fragment">interrupt::free(|_|</span>
+            unsafe { DATA.modify(); }
+        <span class="fragment">);</span>
+    }
+}
+
+interrupt!(EXTI0, handler);
+fn handler() {
+    unsafe { DATA.modify() }
+}
+</code></pre>
+
+            <p class="fragment">Now this is memory safe.</p>
+
+            <p class="fragment">
+              <em>Not all contexts need to lock the data.</em>
+            </p>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### More interrupts
+
+Is this memory safe?
+
+``` rust
+fn main() {
+    loop {
+        interrupt::free(|_| unsafe { DATA.modify(); });
+    }
+}
+
+interrupt!(EXTI0, exti0);
+fn exti0() {
+    unsafe { DATA.modify() }
+}
+
+interrupt!(EXTI1, exti1);
+fn exti1() {
+    unsafe { DATA.modify() }
+}
+```
+
+<p class="fragment">
+  <em>It depends</em>
+</p>
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Nested interrupts (Cortex-M)
+
+This is OK.
+
+``` rust
+// priority = 1
+fn exti0() {
+    interrupt::free(|_| unsafe { DATA.modify(); });
+}
+
+// priority = 2
+fn exti1() {
+    interrupt::free(|_| unsafe { DATA.modify(); });
+}
+
+// priority = 3
+fn exti2() {
+    unsafe { DATA.modify() }
+}
+```
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Better locks (Cortex-M)
+
+`exti0` needs to block `exti1` for memory safety
+
+``` rust
+// priority = 1
+fn exti0() {
+    interrupt::free(|_| unsafe { DATA.modify(); });
+}
+
+// priority = 2
+fn exti1() {
+    unsafe { DATA.modify(); };
+}
+
+// priority = 3
+fn exti2() {
+    // doesn't use DATA at all!
+}
+```
+
+<p class="fragment">... but `exti2` doesn't need to be blocked!</p>
+
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Better locks (Cortex-M3+)
+
+*Temporarily* raise the interrupt priority to block *some* interrupts.
+
+``` rust
+// simplified
+fn raise<R, F>(new_priority: u8, f: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    let old_priority = basepri::read();
+    basepri_max::write(new_priority); // raise
+    let r = f();
+    unsafe { basepri::write(old_priority); } // restore
+    r
+}
+```
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Better locks (Cortex-M3+)
+
+Now `exti2` won't be blocked by `exti1`
+
+``` rust
+// priority = 1
+fn exti0() {
+    // raises priority to 2
+    raise(2, |_| unsafe { DATA.modify(); }); // <-
+}
+
+// priority = 2
+fn exti1() {
+    unsafe { DATA.modify(); };
+}
+
+// priority = 3
+fn exti2() { /* doesn't use DATA */ }
+```
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### [Immediate Ceiling Priority Protocol][icpp] (ICPP)
+
+[icpp]: http://www.csie.ntu.edu.tw/~r95093/papers/Priority%20Inheritance%20Protocols%20An%20Approach%20to%20Real-Time%20Synchronization.pdf
+
+<ul>
+  <li class="fragment">
+    "raised priority value" = Ceiling Priority
+  </li>
+
+  <li class="fragment">
+    "Each resource is assigned a priority ceiling, which is a priority equal to the
+    highest priority of any task which may lock the resource."
+  </li>
+
+  <li class="fragment">
+    Guarantees deadlock free execution if correctly used
+  </li>
+</ul>
+            </textarea>
+          </section>
+        </section>
+
+        <section>
+          <section data-markdown>
+            <textarea data-template>
+### Fearless concurrency
+
+<p class="fragment">
+  The Real Time For the Masses (RTFM) framework
+</p>
+
+<p class="fragment">
+  A port of the <a href="http://www.rtfm-lang.org/">Real Time for The Masses</a> <em>language</em> to Rust.
+</p>
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Real Time for The Masses (RTFM)
+
+<ul>
+  <li class="fragment"> Model: Tasks and resources </li>
+  <li class="fragment"> 1 Task = 1 Interrupt
+    <ul>
+      <li class="fragment"> The hardware will schedule the tasks</li>
+    </ul>
+  </li>
+  <li class="fragment"> Resource: zero cost mechanism to share memory
+    <ul>
+      <li class="fragment"> ICPP: Deadlock freedom</li>
+      <li class="fragment"> Ceilings are computed automatically</li>
+    </ul>
+  </li>
+  <li class="fragment"> Cooperative multitasking is also supported</li>
+  <li class="fragment"> Downside: requires whole program analysis </li>
+</ul>
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Real Time For the Masses (RTFM)
+
+`app!` is the specification of the application.
+
+``` rust
+app! {
+    resources: {
+        static OWNED: Data = /* .. */;
+        static SHARED: Data = /* .. */;
+    },
+    tasks: {
+        EXTI0: {
+            priority: 1,
+            resources: [OWNED, SHARED],
+        },
+        EXTI1: {
+            priority: 2,
+            resources: [SHARED, GPIOA],
+        },
+    }
+}
+```
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Real Time For the Masses (RTFM)
+
+`init` & `idle` are required instead of `main`
+
+``` rust
+// Initialization. Runs first and with interrupts disabled
+fn init(p: init::Peripherals) {
+    p.GPIOA;
+}
+
+// Idle loop. Runs afterwards with interrupts enabled
+fn idle() -> ! {
+    // sleep (or do cooperative multitasking)
+    loop { asm::wfi(); }
+}
+```
+            </textarea>
+          </section>
+
+          <section data-markdown>
+            <textarea data-template>
+### Real Time For the Masses (RTFM)
+
+Tasks
+
+``` rust
+fn exti0(t: &mut Threshold, r: EXTI0::Resources) {
+    r.OWNED += 1; // no lock
+    r.SHARED.claim_mut(t, |shared| shared += 1); // locks
+}
+```
+
+``` rust
+fn exti1(_t: &mut Threshold, r: EXTI1::Resources) {
+    // r.OWNED += 1; // can't be accessed from here!
+    r.SHARED += 1; // no lock
+}
+```
+
+The generated API:
+
+<ul>
+  <li class="fragment">Enforces resource access as specified in `app!`</li>
+  <li class="fragment">Minimizes locking operations</li>
+</ul>
+            </textarea>
+          </section>
+
+          <section>
+            <h3>Real Time For the Masses (RTFM)</h3>
+
+            <p>
+              Beyond locking.
+            </p>
+
+            <ul>
+              <li class="fragment">
+                <a href="https://github.com/japaric/cortex-m-rtfm/issues/36">
+                  Support for atomics with better scoping
+                </a>
+              </li>
+              <li class="fragment">
+                <a href="https://github.com/japaric/cortex-m-rtfm/issues/47">
+                  Single producer single consumer ring buffer
+                </a>
+                <ul>
+                  <li>Statically allocated, interrupt safe and lock free</li>
+                </ul>
+              </li>
+            </ul>
+          </section>
+        </section>
+
+        <section>
+          <section>
+            <h3>What's next?</h3>
+
+            <p class="fragment">
+              <em>Concurrent Reactive Objects (CRO)</em>
+            </p>
+          </section>
+
+          <section data-background-image="cro.png" data-background-size="contain">
+            <ul>
+              <li class="fragment">Model: Objects and Message Passing</li>
+              <li class="fragment">Synchronous and asynchronous messages</li>
+              <li class="fragment">Timing semantics</li>
+              <li class="fragment"> </li>
+              <li class="fragment"> </li>
+              <li class="fragment"> </li>
+              <li class="fragment"> </li>
+              <li class="fragment"> </li>
+              <li class="fragment"> </li>
+              <li class="fragment"> </li>
+            </ul>
+          </section>
+        </section>
+
+        <section>
+          <h1>Thanks!</h1>
+
+          <h4>Questions?</h4>
+
+          <p>
+            (if there's time)
+          </p>
+
+          <p class="fragment">
+            (inb4 "Where are my threads?!")
+          </p>
+        </section>
+      </div>
+    </div>
+
+    <script src="lib/js/head.min.js"></script>
+    <script src="js/reveal.js"></script>
+
+    <script>
+      // More info about config & dependencies:
+      // - https://github.com/hakimel/reveal.js#configuration
+      // - https://github.com/hakimel/reveal.js#dependencies
+      Reveal.initialize({
+        dependencies: [
+          { src: 'plugin/markdown/marked.js' },
+          { src: 'plugin/markdown/markdown.js' },
+          { src: 'plugin/notes/notes.js', async: true },
+          { src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } }
+        ]
+      });
+    </script>
+  </body>
 </html>
